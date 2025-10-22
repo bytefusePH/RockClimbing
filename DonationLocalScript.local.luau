@@ -1,0 +1,17 @@
+local marketplaceService = game:GetService("MarketplaceService")
+local players = game:GetService("Players")
+local player = players.LocalPlayer
+local playerGui = player.PlayerGui
+local donationGui = playerGui:WaitForChild("DonationGUI")
+local donate5Button = donationGui:WaitForChild("Donate5Button")
+local donate20Button = donationGui:WaitForChild("Donate20Button")
+local donate50Button = donationGui:WaitForChild("Donate50Button")
+donate5Button.Activated:Connect(function()
+	marketplaceService:PromptProductPurchase(player, 3435024670)
+end)
+donate20Button.Activated:Connect(function()
+	marketplaceService:PromptProductPurchase(player, 3435082439)
+end)
+donate50Button.Activated:Connect(function()
+	marketplaceService:PromptProductPurchase(player, 3435082437)
+end)
