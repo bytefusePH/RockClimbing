@@ -52,12 +52,36 @@ function UpdatePreviousPositions()
 	previousPositions.leftHandCFrame = playerModule.leftHand.model.CFrame
 	previousPositions.dummyCFrame = playerModule.dummyCharacter.PrimaryPart.CFrame
 end
-local rightHandPreviousCFrame = CFrame.new()
-local leftHandPreviousCFrame = CFrame.new()
-local rightHandLastUpdateTime = 0
-local leftHandLastUpdateTime = 0
-local rightHandVelocity = Vector3.new()
-local leftHandVelocity = Vector3.new()
+-- local rightHandPreviousCFrame = CFrame.new()
+-- local leftHandPreviousCFrame = CFrame.new()
+-- local rightHandLastUpdateTime = 0
+-- local leftHandLastUpdateTime = 0
+-- local rightHandVelocity = Vector3.new()
+-- local leftHandVelocity = Vector3.new()
+local radiusParameters = OverlapParams.new()
+radiusParameters.FilterType = Enum.RaycastFilterType.Exclude
+radiusParameters.FilterDescendantsInstances = {game.Workspace:WaitForChild("Baseplate"), game.Workspace:WaitForChild("SpawnLocation"), player.Character}
+local dummyCharacterFolder = game.Workspace:WaitForChild("PlayerFolder"):WaitForChild("DummyCharacters")
+players.PlayerAdded:Connect(function(newPlayer)
+	newPlayer.CharacterAdded:Connect(function(newCharacter)
+		local dummyCharacter = dummyCharacterFolder:WaitForChild(newPlayer.Name)
+		local dummyIndex = table.find(radiusParameters.FilterDescendantsInstances, dummyCharacter)
+		local characterIndex = table.find(radiusParameters.FilterDescendantsInstances, newPlayer.Character)
+		table.insert(radiusParameters.FilterDescendantsInstances, dummyCharacter)
+		table.insert(radiusParameters.FilterDescendantsInstances, newPlayer.Character)
+	end)
+	newPlayer.CharacterRemoving:Connect(function(newCharacter)
+		local dummyCharacter = dummyCharacterFolder:FindFirstChild(newPlayer.Name)
+		local dummyIndex = table.find(radiusParameters.FilterDescendantsInstances, dummyCharacter)
+		local characterIndex = table.find(radiusParameters.FilterDescendantsInstances, newPlayer.Character)
+		if dummyIndex then
+			table.remove(radiusParameters.FilterDescendantsInstances, dummyIndex)
+		end
+		if characterIndex then
+			table.remove(radiusParameters.FilterDescendantsInstances, characterIndex)
+		end
+	end)
+end)
 local function OnCharacterAdded(newCharacter: Model)
 	local humanoidRootPart = newCharacter.PrimaryPart
 	local humanoid = player.Character:WaitForChild("Humanoid") :: Humanoid
@@ -97,15 +121,7 @@ local function OnCharacterAdded(newCharacter: Model)
 			playerModule.VRModel.PrimaryPart.CFrame = camera.CFrame
 		end
 		if playerModule.rightHand and playerModule.rightHand.model then
-			local currentRightHandCFrame = camera.CFrame * CFrame.new(rightHandTrack.Position * camera.HeadScale) * playerModule.handsOffset * CFrame.fromEulerAnglesXYZ(rightHandTrack:ToEulerAnglesXYZ())
 			playerModule.rightHand.model.CFrame = camera.CFrame * CFrame.new(rightHandTrack.Position * camera.HeadScale) * playerModule.handsOffset * CFrame.fromEulerAnglesXYZ(rightHandTrack:ToEulerAnglesXYZ())
-			local currentTime = os.clock()
-			if rightHandLastUpdateTime ~= 0 and currentTime > rightHandLastUpdateTime then
-				local deltaTime = currentTime - rightHandLastUpdateTime
-				rightHandVelocity = (currentRightHandCFrame.Position - rightHandPreviousCFrame.Position) / deltaTime
-			end
-			rightHandPreviousCFrame = currentRightHandCFrame
-			rightHandLastUpdateTime = currentTime
 			if next(rightHandVariant) ~= nil then
 				if rightHandVariant.model.Anchored == false then
 					rightHandVariant.model.CFrame = playerModule.rightHand.model.CFrame * rightHandVariant.offset
@@ -113,15 +129,7 @@ local function OnCharacterAdded(newCharacter: Model)
 			end
 		end
 		if playerModule.leftHand and playerModule.leftHand.model then
-			local currentLeftHandCFrame = camera.CFrame * CFrame.new(leftHandTrack.Position * camera.HeadScale) * playerModule.leftHandOffset * CFrame.fromEulerAnglesXYZ(leftHandTrack:ToEulerAnglesXYZ())
-			playerModule.leftHand.model.CFrame = currentLeftHandCFrame
-			local currentTime = os.clock()
-			if leftHandLastUpdateTime ~= 0 and currentTime > leftHandLastUpdateTime then
-				local deltaTime = currentTime - leftHandLastUpdateTime
-				leftHandVelocity = (currentLeftHandCFrame.Position - leftHandPreviousCFrame.Position) / deltaTime
-			end
-			leftHandPreviousCFrame = currentLeftHandCFrame
-			leftHandLastUpdateTime = currentTime
+			playerModule.leftHand.model.CFrame = camera.CFrame * CFrame.new(leftHandTrack.Position * camera.HeadScale) * playerModule.leftHandOffset * CFrame.fromEulerAnglesXYZ(leftHandTrack:ToEulerAnglesXYZ())
 			if next(leftHandVariant) ~= nil then
 				if leftHandVariant.model.Anchored == false then
 					leftHandVariant.model.CFrame = playerModule.leftHand.model.CFrame * leftHandVariant.offset
@@ -198,15 +206,6 @@ function OnHandClimb(hand: table, part: Instance)
 		end
 		if not climbingHeartbeat then
 			player.Character.PrimaryPart["CollidableHRP"].CanCollide = false
-			local radiusParameters = OverlapParams.new()
-			local objectsToFilter = preObjectsToFilter
-			for _, localPlayer in players:GetPlayers() do
-				table.insert(objectsToFilter, localPlayer.Character)
-				table.insert(objectsToFilter, playerFolder["DummyCharacters"]:FindFirstChild(localPlayer.Character.Name))
-			end
-			radiusParameters.FilterDescendantsInstances = objectsToFilter
-			radiusParameters.FilterType = Enum.RaycastFilterType.Exclude
-			local partsInRadius = game.Workspace:GetPartBoundsInRadius(playerModule.dummyCharacter.PrimaryPart.CFrame.Position, 10, radiusParameters)
 			SetCharacterInvisibility(true)
 			bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 			climbingHeartbeat = runService.Heartbeat:Connect(function(dt)
@@ -274,7 +273,7 @@ function OnHandLetGo(hand: table)
 			climbingHeartbeat:Disconnect()
 			climbingHeartbeat = nil
 		end
-		local partsInRadius = game.Workspace:GetPartBoundsInRadius(player.Character.PrimaryPart.Position, 5, letGoParams)
+		local partsInRadius = game.Workspace:GetPartBoundsInRadius(player.Character.PrimaryPart.Position, 5, radiusParameters)
 		local groundObjectNear = false
 		for _, part in partsInRadius do
 			if part.Parent:IsA("Folder") == false and part.Parent.Name ~= "Climable" then
@@ -307,10 +306,7 @@ userInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 				leftHandVariant.model.Anchored = false
 			end
 		end
-		local params = OverlapParams.new()
-		params.FilterDescendantsInstances = {player.Character, playerModule.dummyCharacter}
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		local partsInRadius = game.Workspace:GetPartBoundsInRadius(hand.model.Position, 0.2, params)
+		local partsInRadius = game.Workspace:GetPartBoundsInRadius(hand.model.Position, 0.2, radiusParameters)
 		for _, part in partsInRadius do
 			if part:IsA("BasePart") then
 				OnHandClimb(hand, part)

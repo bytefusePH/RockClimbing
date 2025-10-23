@@ -42,12 +42,10 @@ players.PlayerAdded:Connect(function(player)
 					part.Massless = true
 					part.CollisionGroup = "Dummy"
 				end
-			elseif part:IsA("Part") or part:IsA("MeshPart") then
-				part.Massless = true
-				part.CollisionGroup = "Dummy"
 			elseif part:IsA("Accessory") and (part.AccessoryType == Enum.AccessoryType.Jacket) then
-				local handle = part:FindFirstChildOfClass("Part") or part:FindFirstChildOfClass("MeshPart")
-				if handle then handle:Destroy() end
+				-- local handle = part:FindFirstChildOfClass("Part") or part:FindFirstChildOfClass("MeshPart")
+				-- if handle then handle:Destroy() end
+				part:Destroy()
 			end
 		end
 		for _, part in character:GetChildren() do
@@ -67,8 +65,10 @@ players.PlayerAdded:Connect(function(player)
 		end
 	end)
 end)
+local lastUpdateTime = {}
+local minUpdateInterval = 1/10
 function UpdatePlayerVRPosition(player, listOfPositions, handVariants)
-	local dummyCharacter = dummyCharacterFolder:FindFirstChild(player.Character.Name)
+	local dummyCharacter = dummyCharacterFolder:FindFirstChild(player.Name)
 	if dummyCharacter then
 		local vrModel = dummyCharacter:FindFirstChild("VRModel")
 		if not vrModel then return end
@@ -83,5 +83,11 @@ function UpdatePlayerVRPosition(player, listOfPositions, handVariants)
 	end
 end
 updatePlayerPositions.OnServerEvent:Connect(function(player, listOfPositions, handVariants)
+	local currentTime = os.clock()
+	if lastUpdateTime[player.UserId] and (currentTime - lastUpdateTime[player.UserId] < minUpdateInterval) then
+        warn("Player " .. player.Name .. " is spamming UpdatePlayerPositions remote!")
+        return
+    end
+	lastUpdateTime[player.UserId] = currentTime
 	UpdatePlayerVRPosition(player, listOfPositions, handVariants)
 end)

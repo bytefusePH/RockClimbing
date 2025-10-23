@@ -75,7 +75,7 @@ function playerModule.FindHand(right: boolean)
 			end
 		end
 	end
-	playerModule.ChangeHandVariant(handTable, right, "Idle")
+	-- playerModule.ChangeHandVariant(handTable, right, "Idle")
 	return handTable
 end
 function playerModule.OnCharacterAdded(newCharacter: Model)
@@ -116,7 +116,7 @@ end
 function playerModule.VectorsChanged(prevCFrame: CFrame, newCFrame: CFrame)
 	local positionDifference = (prevCFrame.Position - newCFrame.Position).Magnitude
 	local rotationDifference = FindRotationDifference(prevCFrame, newCFrame)
-	if rotationDifference > 5 or positionDifference > 1 then
+	if rotationDifference > 25 or positionDifference > 5 then
 		return true
 	else
 		return false
