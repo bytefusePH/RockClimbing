@@ -1,5 +1,6 @@
 local replicatedStorage = game:GetService("ReplicatedStorage")
 local serverRemotes = replicatedStorage:WaitForChild("ServerRemotes")
+local runService = game:GetService("RunService")
 local players = game:GetService("Players")
 local GrabObject = serverRemotes:WaitForChild("GrabObject") :: RemoteEvent
 local dummyCharacterFolder = game.Workspace:WaitForChild("PlayerFolder"):WaitForChild("DummyCharacters")
@@ -11,7 +12,8 @@ for i, child in pairs(grabbableFolder:GetDescendants()) do
 		initialStats[child] = {position = child.CFrame, collision = child.CanCollide}
 	end
 end
-GrabObject.OnServerEvent:Connect(function(player: Player, right: boolean, action: string, velocity: Vector3?)
+local playerHeartbeats = {}
+GrabObject.OnServerEvent:Connect(function(player: Player, right: boolean, action: string, part: BasePart?, clientHandCFrame: CFrame?, clientPartCFrame: CFrame?, velocityDirection: Vector3?)
 	local dummyCharacter = dummyCharacterFolder:FindFirstChild(player.Name) :: Model
 	if not dummyCharacter then return end
 	local handName = (right == true and "Right" or "Left") .. "Origin"
@@ -26,61 +28,57 @@ GrabObject.OnServerEvent:Connect(function(player: Player, right: boolean, action
 	 	params.FilterDescendantsInstances = {player.Character, dummyCharacter}
 	 	params.FilterType = Enum.RaycastFilterType.Exclude
 	 	local partsInRadius = game.Workspace:GetPartBoundsInRadius(handOrigin.Position, 0.2, params)
-	 	for i, part in partsInRadius do
-			local grabbableFolder = part:FindFirstAncestor("Grabbable")
-	 		if grabbableFolder and grabbableFolder:IsA("Folder") and grabbableFolder.Name == "Grabbable" then
-				local otherGrabWeldConstraint = otherHandOrigin:FindFirstChild("GrabWeldConstraint") :: WeldConstraint
-				if not otherGrabWeldConstraint or part ~= otherGrabWeldConstraint.Part1 then
-					local grabWeldConstraint = Instance.new("WeldConstraint")
-					grabWeldConstraint.Name = "GrabWeldConstraint"
-					grabWeldConstraint.Part0 = handOrigin
-					grabWeldConstraint.Parent = handOrigin
-					grabWeldConstraint.Part1 = part
-					local model = part:FindFirstAncestorOfClass("Model")
-					if model then
-						for i, modelPart in pairs(model:GetDescendants()) do
-							if modelPart:IsA("BasePart") then
-								modelPart.Anchored = false
-								modelPart.CanCollide = false
-							end
-						end
-					end
-					break
+	 	local grabWeld = Instance.new("Weld")
+		grabWeld.Name = "GrabWeld"
+		grabWeld.Part0 = handOrigin
+		grabWeld.Part1 = part
+		grabWeld.C0 = clientHandCFrame:Inverse() * clientPartCFrame
+		grabWeld.Parent = handOrigin
+		local model = part:FindFirstAncestorOfClass("Model")
+		if model then
+			for i, modelPart in pairs(model:GetDescendants()) do
+				if modelPart:IsA("BasePart") then
+					modelPart.Anchored = false
+					modelPart.CanCollide = false
 				end
-	 		end
-	 	end
+			end
+		end
+		respawningObjects[model] = {time = 10, grabbed = true}
 	elseif action == "Release" then
-		local grabWeldConstraint = handOrigin:FindFirstChild("GrabWeldConstraint") :: WeldConstraint
-		if grabWeldConstraint then
-			local grabbedPart = grabWeldConstraint.Part1
-			local model = grabbedPart:FindFirstAncestorOfClass("Model")
-			if model then
+		local grabWeld = handOrigin:FindFirstChild("GrabWeld") :: Weld
+		local otherGrabWeld = otherHandOrigin:FindFirstChild("GrabWeld") :: Weld
+		local grabbedPart = grabWeld.Part1
+		local model = grabbedPart:FindFirstAncestorOfClass("Model")
+		grabWeld:Destroy()
+		if grabWeld then 
+			if not otherGrabWeld or otherGrabWeld.Part1:FindFirstAncestorOfClass("Model") ~= model then
 				for i, modelPart in pairs(model:GetDescendants()) do
 					if modelPart:IsA("BasePart") then
 						modelPart.CanCollide = true
 					end
 				end
-			end
-			grabWeldConstraint:Destroy()
-			if velocity and grabbedPart and grabbedPart:IsA("BasePart") then
-				grabbedPart.Velocity = velocity * 2.5
-			end
-			local grabbedPartIndex = table.find(respawningObjects, grabbedPart)
-			if not grabbedPartIndex then
+				grabbedPart:ApplyImpulse(velocityDirection * 5)
 				coroutine.wrap(function()
-					table.insert(respawningObjects, grabbedPart)
-					task.wait(10)
-					if grabbedPart and grabbedPart:IsA("BasePart") then
-						grabbedPart.CFrame = initialStats[grabbedPart].position
-						if model then
-							for i, modelPart in pairs(model:GetDescendants()) do
-								if modelPart:IsA("BasePart") then
-									modelPart.CanCollide = initialStats[grabbedPart].collision
-									modelPart.Anchored = true
+					respawningObjects[model] = {time = 10, grabbed = false}
+					while respawningObjects[model] do
+						if respawningObjects[model].grabbed == true then
+							break
+						end
+						if respawningObjects[model].time > 0 then
+							task.wait(1)
+							respawningObjects[model].time = respawningObjects[model].time - 1
+						else
+							if model then
+								for i, modelPart in pairs(model:GetChildren()) do
+									if modelPart:IsA("BasePart") then
+										modelPart.CanCollide = true
+										modelPart.Anchored = true
+										modelPart.CFrame = initialStats[modelPart].position
+									end
 								end
 							end
 						end
-						table.remove(respawningObjects, grabbedPartIndex)
+						task.wait(0.1)
 					end
 				end)()
 			end

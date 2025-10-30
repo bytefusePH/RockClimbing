@@ -3,6 +3,7 @@ local runService = game:GetService("RunService")
 local players = game:GetService("Players")
 local camera = game.Workspace.Camera
 local dummyCharacterFolder = game.Workspace:WaitForChild("PlayerFolder"):WaitForChild("DummyCharacters")
+local characterFinishedLoading = game.ReplicatedStorage:WaitForChild("ServerRemotes"):WaitForChild("CharacterFinishedLoading")
 local playerModule = {}
 playerModule.player = nil
 playerModule.cameraOffset = CFrame.new(0, 0.25, 0)
@@ -19,12 +20,8 @@ playerModule.rotatingCamera = false
 playerModule.cameraRotation = 0
 playerModule.dummyCharacter = nil
 function playerModule.InitializeModule(player: Player)
-	playerModule.OnCharacterAdded(player.Character)
 	if playerModule.player then return end
 	playerModule.player = player
-	playerModule.player.CharacterAdded:Connect(function(newCharacter)
-		playerModule.OnCharacterAdded(newCharacter)
-	end)
 end
 
 function playerModule.IsClimbing()
@@ -75,7 +72,6 @@ function playerModule.FindHand(right: boolean)
 			end
 		end
 	end
-	-- playerModule.ChangeHandVariant(handTable, right, "Idle")
 	return handTable
 end
 function playerModule.OnCharacterAdded(newCharacter: Model)
@@ -104,7 +100,7 @@ end
 -- end
 playerModule.raycastParams = RaycastParams.new()
 playerModule.raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-playerModule.raycastParams.FilterDescendantsInstances = {playerModule.dummyCharacter, game.Workspace:WaitForChild("Baseplate"), game.Workspace:WaitForChild("SpawnLocation")}
+playerModule.raycastParams.FilterDescendantsInstances = {playerModule.dummyCharacter, game.Workspace:WaitForChild("SpawnLocation")}
 function FindRotationDifference(prevCFrame: CFrame, newCFrame: CFrame)
 	local prevLook = prevCFrame.LookVector
 	local newLook = newCFrame.LookVector

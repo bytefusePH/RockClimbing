@@ -25,22 +25,22 @@ local function SetInvisibility(part, invisible)
 	isPermaInvisible.Name = "isPermaInvisible"
 	isPermaInvisible.Value = invisible
 end
+function SetPartInvisibility(part, boolean)
+	local isPermaInvisible = part:FindFirstChild("isPermaInvisible")
+	if not isPermaInvisible or isPermaInvisible.Value == false then
+		part.Transparency = boolean == true and 0.75 or 0
+	end
+end
 function SetCharacterInvisibility(boolean)
 	if not playerModule.dummyCharacter then return end
 	for _, part in playerModule.dummyCharacter:GetChildren() do
 		if part ~= playerModule.dummyCharacter.PrimaryPart then
 			if part:IsA("BasePart") then
-				local isPermaInvisible = part:FindFirstChild("isPermaInvisible")
-				if not isPermaInvisible or isPermaInvisible.Value == false then
-					part.Transparency = boolean == true and 0.75 or 0
-				end
+				SetPartInvisibility(part, boolean)
 			elseif part:IsA("Accessory") then
 				local handle = part:FindFirstChild("Handle") or part:FindFirstChildOfClass("BasePart")
 				if handle then
-					local isPermaInvisible = handle:FindFirstChild("isPermaInvisible")
-					if not isPermaInvisible or isPermaInvisible.Value == false then
-						handle.Transparency = boolean == true and 0.75 or 0
-					end
+					SetPartInvisibility(handle, boolean)
 				end
 			end
 		end
@@ -52,12 +52,6 @@ function UpdatePreviousPositions()
 	previousPositions.leftHandCFrame = playerModule.leftHand.model.CFrame
 	previousPositions.dummyCFrame = playerModule.dummyCharacter.PrimaryPart.CFrame
 end
--- local rightHandPreviousCFrame = CFrame.new()
--- local leftHandPreviousCFrame = CFrame.new()
--- local rightHandLastUpdateTime = 0
--- local leftHandLastUpdateTime = 0
--- local rightHandVelocity = Vector3.new()
--- local leftHandVelocity = Vector3.new()
 local radiusParameters = OverlapParams.new()
 radiusParameters.FilterType = Enum.RaycastFilterType.Exclude
 radiusParameters.FilterDescendantsInstances = {game.Workspace:WaitForChild("Baseplate"), game.Workspace:WaitForChild("SpawnLocation"), player.Character}
@@ -82,13 +76,23 @@ players.PlayerAdded:Connect(function(newPlayer)
 		end
 	end)
 end)
+local headAccessoryTypes = {[Enum.AccessoryType.Hair] = true, [Enum.AccessoryType.Hat] = true, [Enum.AccessoryType.Face] = true}
+local previousRightHandCFrame = CFrame.new(0, 0, 0)
+local rightHandVelocity = Vector3.new()
+local previousLeftHandCFrame = CFrame.new(0, 0, 0)
+local leftHandVelocity = Vector3.new()
+local lastVelocityUpdated = 0
 local function OnCharacterAdded(newCharacter: Model)
+	playerModule.OnCharacterAdded(newCharacter)
 	local humanoidRootPart = newCharacter.PrimaryPart
 	local humanoid = player.Character:WaitForChild("Humanoid") :: Humanoid
 	local head = playerModule.dummyCharacter:WaitForChild("Head")
+	head:Destroy()
 	local headPosition = (head.Position.Y - playerModule.dummyCharacter.PrimaryPart.Position.Y)
+	for i, child in playerModule.dummyCharacter:GetChildren() do
+	end
 	humanoid:GetPropertyChangedSignal("FloorMaterial"):Connect(function()
-		SetCharacterInvisibility(humanoid.FloorMaterial == Enum.Material.Air)
+		SetCharacterInvisibility(humanoid.FloorMaterial == Enum.Material.Air and climbingHeartbeat == nil)
 	end)
 	local collidableHRP = Instance.new("Part")
 	collidableHRP.Name = "CollidableHRP"
@@ -140,6 +144,16 @@ local function OnCharacterAdded(newCharacter: Model)
 			UpdatePreviousPositions()
 			updatePlayerPositionsRemote:FireServer(previousPositions)
 		end
+		lastVelocityUpdated += dt
+		if playerModule.rightHand and playerModule.rightHand.model and playerModule.leftHand and playerModule.leftHand.model then
+			if previousRightHandCFrame ~= CFrame.new() and previousLeftHandCFrame ~= CFrame.new() and dt > 0 then
+				rightHandVelocity = (playerModule.rightHand.model.CFrame.Position - previousRightHandCFrame.Position) / dt
+				leftHandVelocity = (playerModule.leftHand.model.CFrame.Position - previousLeftHandCFrame.Position) / dt
+				lastVelocityUpdated = 0
+			end
+			previousRightHandCFrame = playerModule.rightHand.model.CFrame
+			previousLeftHandCFrame = playerModule.leftHand.model.CFrame
+		end
 	end)
 	bodyVelocity = Instance.new("BodyVelocity")
 	bodyVelocity.Parent = newCharacter.PrimaryPart
@@ -147,106 +161,95 @@ local function OnCharacterAdded(newCharacter: Model)
 	bodyVelocity.Velocity = Vector3.new(0, 0, 0)
 	UpdatePreviousPositions()
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-	task.wait(1)
-	for _, part in playerModule.dummyCharacter:GetChildren() do
-		local loweredName = string.lower(part.Name)
-		if part:IsA("MeshPart") or part:IsA("Part") then
-			if string.find(loweredName, "head") then
-				part:Destroy()
-			elseif string.find(loweredName, "foot") or string.find(loweredName, "leg") then
-				SetInvisibility(part, true)
-			end
-		elseif part:IsA("Accessory") then
-			if part.AccessoryType == Enum.AccessoryType.Hat or part.AccessoryType == Enum.AccessoryType.Face or part.AccessoryType == Enum.AccessoryType.Eyebrow or part.AccessoryType == Enum.AccessoryType.Eyelash or part.AccessoryType == Enum.AccessoryType.Hair then
-				local handle = part:FindFirstChildOfClass("Part") or part:FindFirstChildOfClass("MeshPart")
-				if handle then handle:Destroy() end
-			end 
+	for i, part in playerModule.dummyCharacter:GetChildren() do
+		if part:IsA("Accessory") and headAccessoryTypes[part.AccessoryType] == true then
+			part:Destroy()
 		end
 	end
 end
-OnCharacterAdded(player.Character)
-player.CharacterAdded:Connect(function(character)
-	OnCharacterAdded(character)
+local characterFinishedLoading = serverRemotes:WaitForChild("CharacterFinishedLoading")
+characterFinishedLoading.OnClientEvent:Connect(function()
+	OnCharacterAdded(player.Character)
 end)
 local preObjectsToFilter = {game.Workspace:WaitForChild("Baseplate"), game.Workspace:WaitForChild("SpawnLocation"), player.Character}
+local previousMovementVector = Vector3.new(0, 0, 0)
+local lastMovementUpdate = 0
 function OnHandClimb(hand: table, part: Instance)
-	if not player.Character or not player.Character.PrimaryPart then return end
-
-	local climableFolder = part:FindFirstAncestor("Climable")
-	local climable = part:FindFirstChild("Climable")
-	if (climableFolder and climableFolder:IsA("Folder") and climableFolder.Name == "Climable") and (not climable or climable.Value == true) then
-		if hand.currentVariant == "Closed" then
-			local variant = playerModule.FindHandVariant(hand.model, hand.isRight, "Closed")
-			variant.CFrame = variant.CFrame * CFrame.Angles(0, math.rad(-180), 0)
-			variant.Anchored = true
-			local handHighlight = Instance.new("Highlight")
-			handHighlight.Name = "HandHighlight"
-			handHighlight.FillTransparency = 1
-			handHighlight.OutlineColor = Color3.new(1, 1, 0)
-			handHighlight.Parent = variant
-		end
-		local grabSoundClone = grabSound:Clone()
-		grabSoundClone.Parent = hand.model
-		grabSoundClone:Play()
-		local otherHand = hand.isRight and playerModule.leftHand or playerModule.rightHand
-		local startingClimb = not playerModule.IsClimbing()
-		local weld = hand.model:FindFirstChildOfClass("Weld")
-		if weld then
-			weld.Part1.Anchored = true
-			weld.Enabled = false
-		end
+	if hand.currentVariant == "Closed" then
+		local variant = playerModule.FindHandVariant(hand.model, hand.isRight, "Closed")
+		variant.CFrame = variant.CFrame * CFrame.Angles(0, math.rad(-180), 0)
+		variant.Anchored = true
+		local handHighlight = Instance.new("Highlight")
+		handHighlight.Name = "HandHighlight"
+		handHighlight.FillTransparency = 1
+		handHighlight.OutlineColor = Color3.new(1, 1, 0)
+		handHighlight.Parent = variant
+	end
+	local grabSoundClone = grabSound:Clone()
+	grabSoundClone.Parent = hand.model
+	grabSoundClone:Play()
+	local otherHand = hand.isRight and playerModule.leftHand or playerModule.rightHand
+	local startingClimb = not playerModule.IsClimbing()
+	local weld = hand.model:FindFirstChildOfClass("Weld")
+	if weld then
+		weld.Part1.Anchored = true
+		weld.Enabled = false
+	end
+	hand.initialGrabPosition = hand.model.Position
+	hand.initialPartPosition = part.Position
+	hand.grabOffset = part.CFrame:ToObjectSpace(hand.model.CFrame).Position
+	hand.isClimbing = true
+	hand.climbingOn = part
+	if otherHand.isClimbing then
 		hand.initialGrabPosition = hand.model.Position
-		hand.initialPartPosition = part.Position
-		hand.grabOffset = part.CFrame:ToObjectSpace(hand.model.CFrame).Position
-		hand.isClimbing = true
-		hand.climbingOn = part
-		if otherHand.isClimbing then
-			hand.initialGrabPosition = hand.model.Position
-			otherHand.initialGrabPosition = otherHand.model.Position
-		end
-		if not climbingHeartbeat then
-			player.Character.PrimaryPart["CollidableHRP"].CanCollide = false
-			SetCharacterInvisibility(true)
-			bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-			climbingHeartbeat = runService.Heartbeat:Connect(function(dt)
-				if not player.Character or not player.Character.PrimaryPart then
-					if playerModule.leftHand.isClimbing == true then OnHandLetGo(playerModule.leftHand) end
-					if playerModule.rightHand.isClimbing == true then OnHandLetGo(playerModule.rightHand) end
-					return
+		otherHand.initialGrabPosition = otherHand.model.Position
+	end
+	if not climbingHeartbeat then
+		player.Character.PrimaryPart["CollidableHRP"].CanCollide = false
+		SetCharacterInvisibility(true)
+		bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+		climbingHeartbeat = runService.Heartbeat:Connect(function(dt)
+			if not player.Character or not player.Character.PrimaryPart then
+				if playerModule.leftHand.isClimbing == true then OnHandLetGo(playerModule.leftHand) end
+				if playerModule.rightHand.isClimbing == true then OnHandLetGo(playerModule.rightHand) end
+				return
+			end
+			local leftClimbing = (playerModule.leftHand.isClimbing and playerModule.leftHand.climbingOn ~= nil)
+			local rightClimbing = (playerModule.rightHand.isClimbing and playerModule.rightHand.climbingOn ~= nil)
+			if (not playerModule.leftHand or not playerModule.rightHand) or (playerModule.leftHand.isClimbing == false and playerModule.rightHand.isClimbing == false) then
+				if climbingHeartbeat then
+					climbingHeartbeat:Disconnect()
+					climbingHeartbeat = nil
 				end
-				--if grabRenderStep ~= nil then grabRenderStep:Disconnect() end
-				local leftClimbing = (playerModule.leftHand.isClimbing and playerModule.leftHand.climbingOn ~= nil)
-				local rightClimbing = (playerModule.rightHand.isClimbing and playerModule.rightHand.climbingOn ~= nil)
-				if (not playerModule.leftHand or not playerModule.rightHand) or (playerModule.leftHand.isClimbing == false and playerModule.rightHand.isClimbing == false) then
-					if climbingHeartbeat then
-						climbingHeartbeat:Disconnect()
-						climbingHeartbeat = nil
-					end
-					return
+				return
+			end
+			local movementVector = Vector3.new(0, 0, 0)
+			local activeHand = nil
+			local isRight = (rightClimbing == true and leftClimbing == false)
+			if leftClimbing == true and rightClimbing == true then
+				local targetPositionLeft = playerModule.leftHand.climbingOn.CFrame:ToWorldSpace(CFrame.new(playerModule.leftHand.grabOffset)).Position
+				local targetPositionRight = playerModule.rightHand.climbingOn.CFrame:ToWorldSpace(CFrame.new(playerModule.rightHand.grabOffset)).Position
+				leftHandVariant.model.Position = targetPositionLeft
+				rightHandVariant.model.Position = targetPositionRight
+				movementVector = ((playerModule.leftHand.model.Position - targetPositionLeft) + (playerModule.rightHand.model.Position - targetPositionRight)) / 2 * 0.8
+			elseif leftClimbing == true or rightClimbing == true then
+				activeHand = isRight == true and playerModule.rightHand or playerModule.leftHand
+				local handVariant = isRight == true and rightHandVariant or leftHandVariant
+				local targetPosition = activeHand.climbingOn.CFrame:ToWorldSpace(CFrame.new(activeHand.grabOffset)).Position
+				handVariant.model.Position = targetPosition
+				movementVector = (activeHand.model.Position - targetPosition) * 0.8
+			else
+				return
+			end
+			lastMovementUpdate -= dt
+			if movementVector.Magnitude > 0.01 then
+				player.Character.PrimaryPart.CFrame = player.Character.PrimaryPart.CFrame:Lerp(player.Character.PrimaryPart.CFrame - movementVector, 0.5)
+				if lastMovementUpdate <= 0 then
+					previousMovementVector = movementVector
+					lastMovementUpdate = 0
 				end
-				local movementVector = Vector3.new(0, 0, 0)
-				local activeHand = nil
-				local isRight = (rightClimbing == true and leftClimbing == false)
-				if leftClimbing == true and rightClimbing == true then
-					local targetPositionLeft = playerModule.leftHand.climbingOn.CFrame:ToWorldSpace(CFrame.new(playerModule.leftHand.grabOffset)).Position
-					local targetPositionRight = playerModule.rightHand.climbingOn.CFrame:ToWorldSpace(CFrame.new(playerModule.rightHand.grabOffset)).Position
-					leftHandVariant.model.Position = targetPositionLeft
-					rightHandVariant.model.Position = targetPositionRight
-					movementVector = ((playerModule.leftHand.model.Position - targetPositionLeft) + (playerModule.rightHand.model.Position - targetPositionRight)) / 2 * 0.8
-				elseif leftClimbing == true or rightClimbing == true then
-					activeHand = isRight == true and playerModule.rightHand or playerModule.leftHand
-					local handVariant = isRight == true and rightHandVariant or leftHandVariant
-					local targetPosition = activeHand.climbingOn.CFrame:ToWorldSpace(CFrame.new(activeHand.grabOffset)).Position
-					handVariant.model.Position = targetPosition
-					movementVector = (activeHand.model.Position - targetPosition) * 0.8
-				else
-					return
-				end
-				if movementVector.Magnitude > 0.01 then
-					player.Character.PrimaryPart.CFrame = player.Character.PrimaryPart.CFrame:Lerp(player.Character.PrimaryPart.CFrame - movementVector, 0.5)
-				end
-			end)
-		end
+			end
+		end)
 	end
 end
 local grabRenderStep = nil
@@ -276,7 +279,7 @@ function OnHandLetGo(hand: table)
 		local partsInRadius = game.Workspace:GetPartBoundsInRadius(player.Character.PrimaryPart.Position, 5, radiusParameters)
 		local groundObjectNear = false
 		for _, part in partsInRadius do
-			if part.Parent:IsA("Folder") == false and part.Parent.Name ~= "Climable" then
+			if part.Parent:IsA("Folder") == false and part.Parent.Name ~= "Climbable" then
 				groundObjectNear = true
 				break
 			end
@@ -284,6 +287,7 @@ function OnHandLetGo(hand: table)
 		SetCharacterInvisibility(false)
 		bodyVelocity.Velocity = Vector3.new(0, 0, 0)
 		bodyVelocity.MaxForce = Vector3.new(0, 0, 0)
+		player.Character.PrimaryPart:ApplyImpulse(-previousMovementVector * 250)
 	end
 end
 local grabObjectRemote = serverRemotes:WaitForChild("GrabObject")
@@ -292,9 +296,8 @@ userInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if gameProcessedEvent == true then return end
 	local isHand, isRight = playerModule.IsHandInput(input)
 	if isHand then
-		local hand = isRight and playerModule.rightHand or playerModule.leftHand
+		local hand = isRight == true and playerModule.rightHand or playerModule.leftHand
 		if not hand or not hand.model then warn("Hand model not ready") return end
-		grabObjectRemote:FireServer(isRight, "Grab")
 		if hand.isRight == true then
 			rightHandVariant = playerModule.ChangeHandVariant(hand, hand.isRight, "Closed")
 			if rightHandVariant.model then
@@ -309,9 +312,21 @@ userInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		local partsInRadius = game.Workspace:GetPartBoundsInRadius(hand.model.Position, 0.2, radiusParameters)
 		for _, part in partsInRadius do
 			if part:IsA("BasePart") then
-				OnHandClimb(hand, part)
-				if hand.isClimbing then
-					break
+				local parentedFolder = part:FindFirstAncestor("Climbable") or part:FindFirstAncestor("Grabbable")
+				if parentedFolder then
+					if parentedFolder.Name == "Climbable" then
+						local climbable = part:FindFirstChild("Climbable")
+						if (parentedFolder and parentedFolder:IsA("Folder") and parentedFolder.Name == "Climbable") and (not climbable or climbable.Value == true) then
+							OnHandClimb(hand, part)
+							if hand.isClimbing then
+								break
+							end
+						end
+					elseif parentedFolder.Name == "Grabbable" then
+						grabObjectRemote:FireServer(isRight, "Grab", part, hand.model.CFrame, part.CFrame)
+						local grabWeld = hand.model:FindFirstChild("GrabWeld")
+						break
+					end
 				end
 			end
 		end
@@ -324,8 +339,8 @@ userInputService.InputEnded:Connect(function(input, gameProcessedEvent)
 		local hand = isRight == true and playerModule.rightHand or playerModule.leftHand
 		if hand then
 			OnHandLetGo(hand)
-			if hand.model:FindFirstChild("GrabWeldConstraint") then
-				grabObjectRemote:FireServer(isRight, "Release")
+			if hand.model:FindFirstChild("GrabWeld") then
+				grabObjectRemote:FireServer(isRight, "Release", nil, nil, nil, isRight == true and rightHandVelocity or leftHandVelocity)
 			end
 			if hand.currentVariant == "Idle" then return end
 			local _, prevVariant = playerModule.ChangeHandVariant(hand, isRight, "Idle")
