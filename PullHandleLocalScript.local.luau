@@ -5,6 +5,9 @@ local pullmachine = game.Workspace:WaitForChild("Props"):WaitForChild("Exercise"
 local weightHolderRope = pullmachine:WaitForChild("Structure"):WaitForChild("WeightHolder"):WaitForChild("RopeConstraint")
 local weightPart =  pullmachine:WaitForChild("Weight")
 local player = players.LocalPlayer
+repeat
+	task.wait(1)
+until pullHandle.PrimaryPart
 local initialPosition = pullHandle.PrimaryPart.Position
 runService.RenderStepped:Connect(function(dt)
 	if (player.Character.PrimaryPart.Position - weightPart.Position).Magnitude < 25 then

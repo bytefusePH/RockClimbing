@@ -6,6 +6,26 @@ local VRCharacter = replicatedStorage:WaitForChild("VRCharacter")
 local updatePlayerPositions = serverRemotes:WaitForChild("UpdatePlayerPositions")
 local dummyCharacterFolder = game.Workspace:WaitForChild("PlayerFolder"):WaitForChild("DummyCharacters")
 local characterFinishedLoading = serverRemotes:WaitForChild("CharacterFinishedLoading")
+function CreateServerHand(player, hand)
+	local serverHand = Instance.new("Part")
+	serverHand.Size = Vector3.new(5, 5, 5)
+	serverHand.Anchored = false
+	serverHand.CanCollide = false
+	serverHand.Name = "ServerHand"
+	serverHand.Parent = hand
+	local newAttachment = Instance.new("Attachment")
+	newAttachment.Parent = serverHand
+	local handAttachment = Instance.new("Attachment")
+	handAttachment.Parent = hand
+	local alignPosition = Instance.new("AlignPosition")
+	alignPosition.Attachment0 = newAttachment
+	alignPosition.Attachment1 = handAttachment
+	alignPosition.RigidityEnabled = true
+	alignPosition.Parent = hand
+	Instance.new("Highlight", serverHand)
+	serverHand.CFrame = hand.CFrame
+	return serverHand
+end
 players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function(character)
 		local playerDescription = players:GetHumanoidDescriptionFromUserId(player.UserId)
@@ -27,6 +47,23 @@ players.PlayerAdded:Connect(function(player)
 		for i, child in dummyCharacter:GetChildren() do
 			if child:IsA("BasePart") and child ~= dummyCharacter.PrimaryPart then
 				child.CollisionGroup = "Dummy"
+			end
+		end
+		local vrModel = dummyCharacter:WaitForChild("VRModel")
+		local leftOrigin = vrModel:WaitForChild("LeftOrigin")
+		local rightOrigin = vrModel:WaitForChild("RightOrigin")
+		local leftHandMesh = leftOrigin:WaitForChild("LeftHandMesh")
+		local rightHandMesh = rightOrigin:WaitForChild("RightHandMesh")
+		--leftOrigin:SetNetworkOwner(player)
+		--rightOrigin:SetNetworkOwner(player)
+		--leftHandMesh:SetNetworkOwner(player)
+		--rightHandMesh:SetNetworkOwner(player)
+		for i, child in vrModel:GetDescendants() do
+			if child:IsA("BasePart") then
+				local canSet = child:CanSetNetworkOwnership()
+				if canSet == true then
+					child:SetNetworkOwner(player)
+				end
 			end
 		end
 	end)
@@ -54,12 +91,12 @@ function UpdatePlayerVRPosition(player, listOfPositions, handVariants)
 		neckMotor.C0 = CFrame.new(neckMotor.C0.Position) * CFrame.Angles(cameraRotationX, 0, 0)
 	end
 end
-updatePlayerPositions.OnServerEvent:Connect(function(player, listOfPositions, handVariants)
-	local currentTime = os.clock()
-	if lastUpdateTime[player.UserId] and (currentTime - lastUpdateTime[player.UserId] < minUpdateInterval) then
-        warn("Player " .. player.Name .. " is spamming UpdatePlayerPositions remote!")
-        return
-    end
-	lastUpdateTime[player.UserId] = currentTime
-	UpdatePlayerVRPosition(player, listOfPositions, handVariants)
-end)
+-- updatePlayerPositions.OnServerEvent:Connect(function(player, listOfPositions, handVariants)
+-- 	local currentTime = os.clock()
+-- 	if lastUpdateTime[player.UserId] and (currentTime - lastUpdateTime[player.UserId] < minUpdateInterval) then
+--         warn("Player " .. player.Name .. " is spamming UpdatePlayerPositions remote!")
+--         return
+--     end
+-- 	lastUpdateTime[player.UserId] = currentTime
+-- 	UpdatePlayerVRPosition(player, listOfPositions, handVariants)
+-- end)
